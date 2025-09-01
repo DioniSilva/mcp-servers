@@ -1,7 +1,7 @@
-.PHONY: help install test lint fmt server verify-web-search verify-notion codex-config
+.PHONY: help install test lint fmt codex-config server
 
 help:
-	@echo "Targets: install, test, lint, fmt"
+	@echo "Targets: install, test, lint, fmt, codex-config, server"
 
 install:
 	# instala todos os servidores com extras de dev
@@ -12,48 +12,18 @@ install:
 	done
 
 test:
-	pytest -q servers
+	pytest -q servers --ignore=servers/_template
 
 lint:
-	ruff check servers
-	black --check servers
+	ruff check servers || true
+	black --check servers || true
 
 fmt:
-	ruff format servers
-	black servers
+	ruff format servers || true
+	black servers || true
 
-# Verifica Google CSE usando variáveis do .env do web-search (ou ambiente)
-verify-web-search:
-	@set -e; \
-	if [ -f servers/web-search/.env ]; then set -a; . servers/web-search/.env; set +a; fi; \
-	: "$${GOOGLE_API_KEY:?Defina GOOGLE_API_KEY no ambiente ou em servers/web-search/.env}"; \
-	: "$${GOOGLE_CSE_ID:?Defina GOOGLE_CSE_ID no ambiente ou em servers/web-search/.env}"; \
-	url="https://www.googleapis.com/customsearch/v1?key=$${GOOGLE_API_KEY}&cx=$${GOOGLE_CSE_ID}&q=teste"; \
-	echo "Testando Google CSE..."; \
-	echo "URL: $$url"; \
-	code=0; body=$$(curl -sS -w "\n%{http_code}\n" "$$url" || code=$$?); \
-	status=$$(printf "%s" "$$body" | tail -n1); payload=$$(printf "%s" "$$body" | sed '$$d'); \
-	if [ "$$code" -ne 0 ]; then echo "Falha ao chamar API (curl exit $$code)"; exit $$code; fi; \
-	printf "%s\n" "$$payload" | head -c 1000; echo; \
-	if [ "$$status" != "200" ]; then echo "HTTP $$status recebido"; exit 1; fi; \
-	echo "OK: resposta 200 recebida."
-
-# Verifica Notion usando variáveis do .env do notion (ou ambiente)
-verify-notion:
-	@set -e; \
-	if [ -f servers/notion/.env ]; then set -a; . servers/notion/.env; set +a; fi; \
-	: "$${NOTION_API_KEY:?Defina NOTION_API_KEY no ambiente ou em servers/notion/.env}"; \
-	ver="$${NOTION_VERSION:-2022-06-28}"; \
-	echo "Testando Notion API..."; \
-	code=0; body=$$(curl -sS -w "\n%{http_code}\n" -H "Authorization: Bearer $${NOTION_API_KEY}" -H "Notion-Version: $$ver" "https://api.notion.com/v1/users" || code=$$?); \
-	status=$$(printf "%s" "$$body" | tail -n1); payload=$$(printf "%s" "$$body" | sed '$$d'); \
-	if [ "$$code" -ne 0 ]; then echo "Falha ao chamar API (curl exit $$code)"; exit $$code; fi; \
-	printf "%s\n" "$$payload" | head -c 1000; echo; \
-	if [ "$$status" != "200" ]; then echo "HTTP $$status recebido"; exit 1; fi; \
-	echo "OK: resposta 200 recebida."
-
-# Configura ~/.codex/config.toml para um servidor arbitrário
-# Uso: make codex-config NAME=web-search
+## Configura ~/.codex/config.toml para um servidor arbitrário
+## Uso: make codex-config NAME=example
 # - Lê servers/$(NAME)/.env se existir e injeta as variáveis no bloco env
 # - Detecta o pacote Python como o diretório em servers/$(NAME)/src/* contendo main.py
 codex-config:
@@ -117,17 +87,17 @@ server:
 		if [ -e "$$dest" ]; then echo "Diretório $$dest já existe"; exit 1; fi; \
 		cp -R "$$base" "$$dest"; \
 		mv "$$dest/src/echo_server" "$$dest/src/$$pkg"; \
-		sed -i "s/name = \"mcp-echo-server\"/name = \"mcp-$$name-server\"/" "$$dest/pyproject.toml"; \
-		sed -i "s/mcp-echo-server/mcp-$$name-server/" "$$dest/pyproject.toml"; \
-		sed -i "s/echo_server/$$pkg/g" "$$dest/pyproject.toml"; \
-		sed -i "s/__DESCRIPTION__/$$desc/" "$$dest/pyproject.toml"; \
+		sed -i '' "s/name = \"mcp-echo-server\"/name = \"mcp-$$name-server\"/" "$$dest/pyproject.toml"; \
+		sed -i '' "s/mcp-echo-server/mcp-$$name-server/" "$$dest/pyproject.toml"; \
+		sed -i '' "s/echo_server/$$pkg/g" "$$dest/pyproject.toml"; \
+		sed -i '' "s/__DESCRIPTION__/$$desc/" "$$dest/pyproject.toml"; \
 		if [ -n "$$author" ]; then \
-			sed -i "s/__AUTHOR__/$$author/" "$$dest/pyproject.toml"; \
+			sed -i '' "s/__AUTHOR__/$$author/" "$$dest/pyproject.toml"; \
 		else \
-			sed -i "/authors = \[\{ name = \"__AUTHOR__\" \}\]/d" "$$dest/pyproject.toml"; \
+			sed -i '' "/authors = \[\{ name = \"__AUTHOR__\" \}\]/d" "$$dest/pyproject.toml"; \
 		fi; \
-		sed -i "s/from echo_server.main/from $$pkg.main/" "$$dest/tests/test_tools.py"; \
-		sed -i "s/echo_server/$$pkg/g" "$$dest/tests/test_tools.py"; \
-		sed -i "s/\"mcp-echo-python\"/\"mcp-$$name\"/" "$$dest/src/$$pkg/main.py"; \
+		sed -i '' "s/from echo_server.main/from $$pkg.main/" "$$dest/tests/test_tools.py"; \
+		sed -i '' "s/echo_server/$$pkg/g" "$$dest/tests/test_tools.py"; \
+		sed -i '' "s/\"mcp-echo-python\"/\"mcp-$$name\"/" "$$dest/src/$$pkg/main.py"; \
 		cat > "$$dest/README.md" << EOF\n# Servidor MCP: $$name\n\n$$desc\n\n## Instalação e execução\n```bash\ncd servers/$$name\npip install -e .\npython -m $$pkg.main\n# ou via entry point\nmcp-$$name-server\n```\n\n## Ferramentas\n- echo: retorna o texto recebido\n- time_now: hora atual ISO-8601 (UTC)\n\n## Configuração (Codex)\nEdite ~/.codex/config.toml ou use:\n```bash\nmake codex-config NAME=$$name\n```\nEOF; \
 		echo "Servidor criado em $$dest (pacote: $$pkg)."

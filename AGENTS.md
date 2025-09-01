@@ -1,243 +1,125 @@
 ## 🎯 Objetivo
 
-* Ter um repositório enxuto (`my-mcp/`) com **estrutura organizada**, pronto para escalar.
-* Rodar localmente com `uv`.
-* Integrar com o **Codex** via STDIO.
+- Manter um projeto enxuto com um pacote por servidor MCP.
+- Fornecer um template para criar novos servidores rapidamente.
+- Integrar com o Codex via STDIO e facilitar testes locais.
 
 ---
 
 ## ✅ Pré‑requisitos
 
-* **Python** ≥ 3.10
-* **uv** instalado (`pipx install uv` ou binário oficial)
-* Acesso ao **Codex** (CLI/desktop) e permissão para editar `~/.codex/config.toml`
+- Python ≥ 3.10
+- uv instalado (opcional, para usar `mcp dev`): `pipx install uv`
+- Acesso ao Codex (CLI/desktop) e permissão para editar `~/.codex/config.toml`
 
-> Dica: no **WSL**, mantenha o projeto no filesystem Linux (ex.: `~/projects/my-mcp`).
+> Dica: em WSL, mantenha o projeto no filesystem Linux (ex.: `~/projects/mcp-servers`).
 
 ---
 
-## 1) Estrutura de pastas
+## Estrutura do Projeto
 
 ```
-my-mcp/
-├─ pyproject.toml
+mcp-servers/
+├─ Makefile
+├─ README.md
+├─ AGENTS.md
 └─ servers/
-   └─ websearch/
-      ├─ __init__.py
-      └─ server.py
+   ├─ example/
+   │  ├─ pyproject.toml
+   │  └─ src/example_server/main.py
+   └─ _template/
+      ├─ pyproject.toml
+      ├─ src/echo_server/main.py
+      └─ tests/test_tools.py
 ```
 
 ---
 
-## 2) `pyproject.toml`
+## Criar um novo servidor (scaffold)
 
-Use dependência leve com o SDK MCP.
-
-```toml
-[project]
-name = "my-mcp-servers"
-version = "0.1.0"
-requires-python = ">=3.10"
-dependencies = [
-  "mcp[cli]>=1.13.0",
-  "httpx>=0.27.0",
-  "beautifulsoup4>=4.12.3",
-  "pydantic>=2.7.0"
-]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-```
-
-## 2.1) Variáveis de ambiente (necessárias para o Web Search)
+Use o template oficial para gerar um novo servidor MCP:
 
 ```bash
-# Obrigatórias
-export GOOGLE_API_KEY="seu-api-key"
-export GOOGLE_CSE_ID="seu-cse-id"
+cd mcp-servers
+make server NAME=meu-servidor DESCRIPTION="desc opcional" AUTHOR="nome opcional"
+```
 
-# Opcionais (padrões no código)
-export WEB_RPS=1
-export WEB_BURST=5
-export WEB_SEARCH_TIMEOUT=10
-export WEB_FETCH_TIMEOUT=10
-export WEB_FETCH_MAX_CHARS=8000
+Isso cria `servers/meu-servidor` com:
+- `pyproject.toml` ajustado (nome do pacote e entry point)
+- pacote Python em `src/<nome_do_pacote>/`
+- README com instruções básicas
 
-
-> Se preferir imobilizar versões para CI, fixe os pins em um `uv.lock` (gerado pelo `uv sync`).
+Edite `src/<nome_do_pacote>/main.py` e adicione suas `@server.tool(...)` conforme necessário.
 
 ---
 
+## Rodar localmente
 
-## 3) Primeiro server MCP — `servers/websearch/server.py`
-Troque a seção inteira do “greeter” pelo teu código (coloque exatamente assim, dentro do arquivo `servers/websearch/server.py`):
+Instalação em modo desenvolvimento:
 
-```python
-import os
-import time
-import asyncio
-from typing import Any, Dict, List
+```bash
+cd mcp-servers/servers/<nome>
+pip install -e .
+```
 
-import httpx
-from bs4 import BeautifulSoup
-from pydantic import BaseModel
+Executar via entry point (STDIO):
 
-try:
-    # Use FastMCP, which provides the @tool decorator API
-    from mcp.server.fastmcp import FastMCP
-except Exception as e:
-    raise SystemExit(
-        "Pacote 'mcp' não encontrado. Instale com: pip install mcp\n" f"Detalhes: {e}"
-    )
+```bash
+mcp-<nome>-server
+```
 
+Ou via módulo Python (útil para `mcp dev`):
 
-class RateLimiter:
-    def __init__(self, rate_per_sec: float, burst: int):
-        self.capacity = float(burst)
-        self.tokens = float(burst)
-        self.rate = float(rate_per_sec)
-        self.timestamp = time.monotonic()
-        self._lock = asyncio.Lock()
+```bash
+python -m <nome_do_pacote>.main
+```
 
-    async def acquire(self) -> None:
-        async with self._lock:
-            now = time.monotonic()
-            elapsed = now - self.timestamp
-            self.timestamp = now
-            self.tokens = min(self.capacity, self.tokens + elapsed * self.rate)
-            if self.tokens < 1.0:
-                wait_time = (1.0 - self.tokens) / self.rate if self.rate > 0 else 0
-                await asyncio.sleep(max(0, wait_time))
-                self.tokens = 0.0
-            else:
-                self.tokens -= 1.0
+Inspecionar com MCP Inspector (uv):
 
+```bash
+cd mcp-servers/servers/<nome>
+uv run mcp dev src/<nome_do_pacote>/main.py:server
+```
 
-WEB_RPS = float(os.getenv("WEB_RPS", "1"))
-WEB_BURST = int(os.getenv("WEB_BURST", "5"))
-_limiter = RateLimiter(WEB_RPS, WEB_BURST)
+---
 
-server = FastMCP(name="mcp-web-search")
+## Configurar no Codex
 
+Use o alvo do Makefile para escrever a entrada em `~/.codex/config.toml`:
 
-class SearchItem(BaseModel):
-    title: str | None = None
-    link: str
-    snippet: str | None = None
+```bash
+cd mcp-servers
+make codex-config NAME=<nome>
+```
 
+Isso detecta o pacote em `servers/<nome>/src/*/main.py` e configura `command`, `args`, `cwd` e variáveis de ambiente (carregadas de `servers/<nome>/.env`, se existir).
 
-class WebSearchResponse(BaseModel):
-    results: List[SearchItem]
+> Recomenda-se manter segredos fora do git e usar `.env` por servidor (gitignored).
 
+---
 
-class FetchUrlResponse(BaseModel):
-    url: str
-    title: str | None = None
-    text: str
+## Testes, Lint e Formatação
 
+Executar em todos os servidores (o template é ignorado nos testes):
 
-async def _google_search(query: str, site: str | None, limit: int) -> List[Dict[str, Any]]:
-    api_key = os.getenv("GOOGLE_API_KEY")
-    cse_id = os.getenv("GOOGLE_CSE_ID")
-    if not api_key or not cse_id:
-        raise RuntimeError("GOOGLE_API_KEY e GOOGLE_CSE_ID são obrigatórios.")
+```bash
+cd mcp-servers
+make install   # instala todos os servidores em -e com [dev]
+make test      # pytest servers (ignora servers/_template)
+make lint      # ruff + black --check
+make fmt       # ruff format + black
+```
 
-    q = query
-    if site:
-        q = f"site:{site} {query}"
+---
 
-    params = {
-        "key": api_key,
-        "cx": cse_id,
-        "q": q,
-        "num": max(1, min(10, int(limit))),
-    }
+## Boas práticas
 
-    timeout = float(os.getenv("WEB_SEARCH_TIMEOUT", "10"))
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        await _limiter.acquire()
-        resp = await client.get("https://www.googleapis.com/customsearch/v1", params=params)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("items", [])
-        results = []
-        for it in items:
-            results.append(
-                {
-                    "title": it.get("title"),
-                    "link": it.get("link"),
-                    "snippet": it.get("snippet"),
-                }
-            )
-        return results
+- Um pacote por servidor; evite dependências cruzadas.
+- Mantenha as tools pequenas e puras; mova I/O para módulos de serviço.
+- Defina configurações por ambiente via `.env` no diretório do servidor.
+- Use timeouts e rate limits configuráveis por env quando fizer I/O externo.
+- Tipos com `pydantic`/`dataclasses` para entradas/saídas previsíveis.
 
-
-async def _fetch_and_clean(url: str, max_chars: int) -> Dict[str, Any]:
-    timeout = float(os.getenv("WEB_FETCH_TIMEOUT", "10"))
-    headers = {"User-Agent": "mcp-web-search/0.1"}
-    async with httpx.AsyncClient(timeout=timeout, headers=headers, follow_redirects=True) as client:
-        await _limiter.acquire()
-        resp = await client.get(url)
-        resp.raise_for_status()
-        html = resp.text
-
-    soup = BeautifulSoup(html, "html.parser")
-    title = soup.title.string.strip() if soup.title and soup.title.string else None
-    # Remove script/style
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
-    text = " ".join(soup.get_text(" ").split())
-    if len(text) > max_chars:
-        text = text[:max_chars] + "…"
-    return {"title": title, "text": text}
-
-
-@server.tool(
-    name="web_search",
-    description="Busca na web via Google CSE e retorna resultados.",
-)
-async def tool_web_search(
-    query: str,
-    site: str | None = None,
-    limit: int | None = None,
-) -> WebSearchResponse:
-    try:
-        default_limit = int(os.getenv("WEB_SEARCH_LIMIT", "5"))
-        results = await _google_search(query, site, limit or default_limit)
-        items = [
-            SearchItem(title=r.get("title"), link=r.get("link", ""), snippet=r.get("snippet"))
-            for r in results
-            if r.get("link")
-        ]
-        return WebSearchResponse(results=items)
-    except Exception:
-        return WebSearchResponse(results=[])
-
-
-@server.tool(
-    name="fetch_url",
-    description="Busca conteúdo de uma URL e retorna texto limpo e metadados.",
-)
-async def tool_fetch_url(url: str, max_chars: int | None = None) -> FetchUrlResponse:
-    try:
-        maxc = int(os.getenv("WEB_FETCH_MAX_CHARS", "8000")) if max_chars is None else int(max_chars)
-        data = await _fetch_and_clean(url, maxc)
-        return FetchUrlResponse(url=url, title=data.get("title"), text=data.get("text", ""))
-    except Exception as e:
-        return FetchUrlResponse(url=url, title=None, text=f"Erro: {e}")
-
-
-def main_cli() -> None:
-    server.run("stdio")
-
-
-if __name__ == "__main__":
-    main_cli()
-
-
-> Dica: mantenha as ferramentas **puras** (I/O mínimo), e mova integrações externas (FS, HTTP, DB) para módulos de serviço. Facilita testes.
 
 ---
 
