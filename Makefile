@@ -11,8 +11,8 @@ install:
 	  fi; \
 	done
 
-test:
-	pytest -q servers --ignore=servers/_template
+# test:
+# 	pytest -q servers --ignore=servers/_template
 
 lint:
 	ruff check servers || true

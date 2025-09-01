@@ -2,12 +2,7 @@ name: CI (mcp-servers)
 
 on:
   push:
-    paths:
-      - 'mcp-servers/**'
-      - '.github/workflows/test-mcp-servers.yml'
   pull_request:
-    paths:
-      - 'mcp-servers/**'
 
 jobs:
   test:
@@ -22,11 +17,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest ruff black
       - name: Lint
-        working-directory: mcp-servers
-        run: |
-          make lint
+        run: make lint
       - name: Tests
-        working-directory: mcp-servers
-        run: |
-          make test
-
+        run: make test

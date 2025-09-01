@@ -23,7 +23,7 @@ jobs:
 
       - name: Verify tag matches package version
         run: |
-          cd mcp-servers/servers/example
+          cd servers/example
           python - <<'PY'
           import tomllib, os
           with open('pyproject.toml','rb') as f:
@@ -42,11 +42,14 @@ jobs:
           python -m pip install build
 
       - name: Build package
-        working-directory: mcp-servers/servers/example
-        run: python -m build
+        run: |
+          cd servers/example
+          python -m build
+
+      - name: Detect built dist dir
+        run: echo "PKG_DIR=servers/example/dist" >> $GITHUB_ENV
 
       - name: Publish to PyPI (Trusted Publisher)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: mcp-servers/servers/example/dist
-
+          packages-dir: ${{ env.PKG_DIR }}
