@@ -66,9 +66,19 @@ Guia completo: veja `PUBLISHING.md`.
 2) No GitHub, o workflow já possui `permissions: id-token: write`. Este monorepo mantém o workflow em `mcp-servers/.github/workflows/publish-*.yml`. Se preferir rodar automaticamente no repositório, você pode copiar este arquivo para a raiz em `.github/workflows/`.
 
 3) Versão e tag
-- Atualize `servers/example/pyproject.toml` (`project.version`).
-- Crie uma tag seguindo o padrão: `example-v<versão>` (ex.: `example-v0.1.0`).
-- Ao fazer push da tag, o workflow compila e publica o pacote.
+- Opção A (recomendada): use o helper de release
+  ```bash
+  # bump patch/minor/major
+  make release NAME=example PART=patch
+  # ou defina explicitamente a versão
+  make release NAME=example VERSION=0.1.4
+  # depois envie a tag criada para o remoto
+  git push origin example-v0.1.4
+  ```
+- Opção B (manual):
+  - Atualize `servers/example/pyproject.toml` (`project.version`).
+  - Crie uma tag seguindo o padrão: `example-v<versão>` (ex.: `example-v0.1.0`).
+  - Ao fazer push da tag, o workflow compila e publica o pacote.
 
 4) Múltiplos servidores
 - Copie `mcp-servers/.github/workflows/publish-mcp-example.yml` e ajuste o caminho/tag para cada servidor novo.

@@ -1,7 +1,7 @@
-.PHONY: help install test lint fmt codex-config server
+.PHONY: help install test lint fmt codex-config server release
 
 help:
-	@echo "Targets: install, test, lint, fmt, codex-config, server"
+	@echo "Targets: install, test, lint, fmt, codex-config, server, release"
 
 install:
 	# instala todos os servidores com extras de dev
@@ -101,3 +101,21 @@ server:
 		sed -i '' "s/\"mcp-echo-python\"/\"mcp-$$name\"/" "$$dest/src/$$pkg/main.py"; \
 		cat > "$$dest/README.md" << EOF\n# Servidor MCP: $$name\n\n$$desc\n\n## Instalação e execução\n```bash\ncd servers/$$name\npip install -e .\npython -m $$pkg.main\n# ou via entry point\nmcp-$$name-server\n```\n\n## Ferramentas\n- echo: retorna o texto recebido\n- time_now: hora atual ISO-8601 (UTC)\n\n## Configuração (Codex)\nEdite ~/.codex/config.toml ou use:\n```bash\nmake codex-config NAME=$$name\n```\nEOF; \
 		echo "Servidor criado em $$dest (pacote: $$pkg)."
+
+# Bump de versão e criação de tag Git para um servidor
+# Uso:
+#   make release NAME=example PART=patch   # ou PART=minor/major
+#   make release NAME=example VERSION=0.2.0
+release:
+	@set -e; \
+	name="$(NAME)"; \
+	if [ -z "$$name" ]; then echo "Uso: make release NAME=<server> (PART=patch|minor|major | VERSION=X.Y.Z)"; exit 1; fi; \
+	if [ -n "$(PART)" ] && [ -n "$(VERSION)" ]; then echo "Defina apenas um: PART ou VERSION"; exit 1; fi; \
+	if [ -z "$(PART)" ] && [ -z "$(VERSION)" ]; then echo "Informe PART=patch|minor|major ou VERSION=X.Y.Z"; exit 1; fi; \
+	pybin=$$(command -v python || command -v python3 || true); \
+	if [ -z "$$pybin" ]; then echo "Python não encontrado no PATH"; exit 1; fi; \
+	if [ -n "$(PART)" ]; then \
+	  "$$pybin" scripts/release.py --server "$$name" --bump "$(PART)"; \
+	else \
+	  "$$pybin" scripts/release.py --server "$$name" --new-version "$(VERSION)"; \
+	fi
